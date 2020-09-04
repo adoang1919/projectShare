@@ -1,0 +1,65 @@
+Create standby Database
+Di Master
+1. postgresql.conf
+listen_addresses = '*' -- atau spesific ip
+wal_level = hot_standby
+synchronous_commit = local
+archive_mode = on
+archive_command = 'cp %p /var/lib/postgresql/9.6/main/archive/%f'
+max_wal_senders = 2
+wal_keep_segments = 10
+synchronous_standby_names = 'pgrep001'
+
+
+mkdir -p /var/lib/postgresql/9.6/main/archive/
+chmod 700 /var/lib/postgresql/9.6/main/archive/
+chown -R postgres:postgres /var/lib/postgresql/9.6/main/archive/
+
+2. pg_hba.conf
+# Localhost
+host    replication     replica          127.0.0.1/32            md5
+
+# PostgreSQL Master IP address
+host    replication     replica          10.10.115.110/32            md5
+
+# PostgreSQL SLave IP address
+host    replication     replica          10.10.115.111/32            md5
+
+
+3. restart postgres
+
+4. create user dalam psql
+CREATE USER replica REPLICATION LOGIN ENCRYPTED PASSWORD 'Pancasila#45';
+
+Standby
+
+1. vim postgresql.conf
+listen_addresses = '10.0.115.111'
+wal_level = hot_standby
+synchronous_commit = local
+max_wal_senders = 2
+wal_keep_segments = 10
+synchronous_standby_names = 'pgrep001'
+hot_standby = on
+
+
+2. Copy Database Master Ke standby
+pg_basebackup -h 10.0.115.110 -U replica -D /var/lib/postgresql/9.6/main -P --xlog
+
+3. vim recovery.conf
+standby_mode = 'on'
+primary_conninfo = 'host=10.0.115.110 port=5432 user=replica password=Pancasila#45 application_name=pgrep001'
+restore_command = 'cp /var/lib/postgresql/9.6/main/archive/%f %p'
+trigger_file = '/tmp/postgresql.trigger.5432'
+
+chmod 600 recovery.conf
+
+
+4. start postgres di slave
+
+5. testing
+psql -c "select application_name, state, sync_priority, sync_state from pg_stat_replication;"
+psql -x -c "select * from pg_stat_replication;"
+
+
+https://www.howtoforge.com/tutorial/how-to-set-up-master-slave-replication-for-postgresql-96-on-ubuntu-1604/
